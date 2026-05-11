@@ -71,13 +71,28 @@ Los niveles son aditivos — se ejecutan todos, los resultados se mezclan y dedu
    c. Acumular en lista de candidatos (dedup con Nivel 1)
 
 6. **Nivel 3 — WebSearch queries** (paralelo si posible):
-   Para cada query en `search_queries` con `enabled: true`:
+   Para cada query en `search_queries` con `enabled: true` y cuyo nombre NO empiece por `X —`:
    a. Ejecutar WebSearch con el `query` definido
    b. De cada resultado extraer: `{title, url, company}`
       - **title**: del título del resultado (antes del " @ " o " | ")
       - **url**: URL del resultado
       - **company**: después del " @ " en el título, o extraer del dominio/path
    c. Acumular en lista de candidatos (dedup con Nivel 1+2)
+
+6.5. **Nivel 4 — X (Twitter) feed scan** (WebSearch, resultados 1-3 días de antigüedad):
+
+   Para cada query en `search_queries` con `enabled: true` y nombre que empiece por `X —`:
+   a. Ejecutar WebSearch con el `query` definido
+   b. Para cada resultado con URL `x.com` o `twitter.com`:
+      - Extraer el texto del tweet del snippet del resultado
+      - Buscar en el texto una URL de job (greenhouse, ashby, lever, workday, company careers, etc.)
+      - Si hay URL de job: extraer `{job_url, company, title}` del texto del tweet
+      - Si el tweet solo dice "hiring" sin URL directa: guardar la URL del tweet en `pipeline.md` como `- [ ] {tweet_url} | {company} | tweet-lead — verify manually`
+   c. Marcar estos resultados como `source: x_feed` en scan-history.tsv
+   d. **No verificar liveness con Playwright** para URLs de tweets sin job link — añadir directamente como leads para revisión manual
+   e. Para URLs de job extraídas de tweets: sí verificar liveness (paso 7.5 normal)
+
+   **Nota:** Los resultados de X vía WebSearch pueden tener 1-3 días de antigüedad. Los tweets con solo texto de "hiring" sin URL se añaden como leads para verificación manual en pipeline.md.
 
 6. **Filtrar por título** usando `title_filter` de `portals.yml`:
    - Al menos 1 keyword de `positive` debe aparecer en el título (case-insensitive)
@@ -142,7 +157,10 @@ https://...	2026-02-10	Ashby — AI PM	PM AI	Acme	added
 https://...	2026-02-10	Greenhouse — SA	Junior Dev	BigCo	skipped_title
 https://...	2026-02-10	Ashby — AI PM	SA AI	OldCo	skipped_dup
 https://...	2026-02-10	WebSearch — AI PM	PM AI	ClosedCo	skipped_expired
+https://x.com/...	2026-02-10	X — Design Jobs	UX Designer	StartupCo	added_x_lead
 ```
+
+Status values: `added`, `skipped_title`, `skipped_dup`, `skipped_expired`, `added_x_lead` (X tweet with no direct job URL — manual verify needed)
 
 ## Resumen de salida
 
@@ -155,11 +173,15 @@ Filtradas por título: N relevantes
 Duplicadas: N (ya evaluadas o en pipeline)
 Expiradas descartadas: N (links muertos, Nivel 3)
 Nuevas añadidas a pipeline.md: N
-
   + {company} | {title} | {query_name}
   ...
 
+X feed leads (verificación manual): N
+  ~ {company} | {tweet_url} — no job URL in tweet
+  ...
+
 → Ejecuta /career-ops pipeline para evaluar las nuevas ofertas.
+→ Revisa los X leads manualmente si los hay.
 ```
 
 ## Gestión de careers_url
